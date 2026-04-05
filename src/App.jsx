@@ -317,6 +317,10 @@ export default function NexxenCommenter() {
   const [clientMode,setClientMode]=useState(false);
   const [clientPerms,setClientPerms]=useState(null);
   const [attachment,setAttachment]=useState(null);
+  const [previewMode,setPreviewMode]=useState("screenshot");
+  const [previewUrl,setPreviewUrl]=useState(null);
+  const [previewLoaded,setPreviewLoaded]=useState(false);
+  const [previewError,setPreviewError]=useState(false);
   const fileInputRef=useRef(null);
   const attachRef=useRef(null);
   const iframeRef=useRef(null);
@@ -342,6 +346,17 @@ export default function NexxenCommenter() {
     if(s){setUser(s);setProjects(await DB.getProjectsForUser(s.id,s.email,s.email===ADMIN_EMAIL));setView("dashboard");}
     else setView("auth");
   })();},[]);
+
+  // ─── Generate preview screenshot URL for URL projects ───
+  useEffect(()=>{
+    const proj=currentProject||clientProject;
+    if(!proj||proj.type!=="url"||!proj.url)return;
+    const device=DEVICES.find(d=>d.id===selectedDevice)||DEVICES[0];
+    const url=`https://image.thum.io/get/width/${device.px}/fullpage/noanimate/${proj.url}`;
+    setPreviewUrl(url);
+    setPreviewLoaded(false);
+    setPreviewError(false);
+  },[currentProject,clientProject,selectedDevice]);
 
   // ─── Auth ───
   const handleAuth=async()=>{
@@ -395,14 +410,20 @@ export default function NexxenCommenter() {
     if(attachment){aName=attachment.name;aData=attachment.data;aType=attachment.type;}
     await DB.addComment(pin.id,author,newComment.trim(),aName,aData,aType);
 
-    // Screenshot: for image projects crop from raw image data (no DOM capture, no existing pins);
-    // for URL projects use microlink screenshot API with fallback location card.
+    // Screenshot: for image projects crop from raw image; for URL projects use the preview image if loaded, else location card
     const num=pins.length+1;
     let shotData=null;
     if(proj.type==="image"&&proj.image_data){
       shotData=await captureImageRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num);
     } else if(proj.url){
-      shotData=await captureUrlScreenshot(proj.url,pendingPinPos.x,pendingPinPos.y,num);
+      // Try to capture from the thum.io preview image (which is displayed as img, not iframe)
+      if(previewMode==="screenshot"&&previewUrl&&previewLoaded){
+        shotData=await captureImageRegion(previewUrl,pendingPinPos.x,pendingPinPos.y,num);
+      }
+      // If that failed (CORS), fall back to location card
+      if(!shotData){
+        shotData=await captureUrlScreenshot(proj.url,pendingPinPos.x,pendingPinPos.y,num);
+      }
     }
     if(shotData){DB.updatePinScreenshot(pin.id,shotData);}
 
@@ -574,43 +595,60 @@ export default function NexxenCommenter() {
         <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center",padding:20,background:t.canvasBg,cursor:isPlacingPin?"crosshair":"default"}}>
           <div style={{width:device.width,maxWidth:"100%",position:"relative",transition:"width .3s ease"}}>
 
-            {/* URL project:
-                - iframe fills the container and can scroll freely
-                - pin overlay is position:absolute over the iframe, same size
-                - pins use % coords relative to the CONTAINER (viewport window), not iframe scroll content
-                - this means pins stay fixed at the visual position where the user clicked,
-                  regardless of iframe scroll — which is the correct UX for a review tool
-            */}
+            {/* URL project: screenshot image (pins scroll with content) or live iframe */}
             {projType==="url"&&projUrl?
-              <div
-                style={{position:"relative",width:"100%",height:"calc(100vh - 94px)",borderRadius:12,border:"1px solid "+t.border,background:"#fff",overflow:"hidden"}}
-              >
-                <iframe
-                  ref={iframeRef}
-                  src={projUrl}
-                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none",background:"#fff",pointerEvents:isPlacingPin?"none":"auto",borderRadius:12}}
-                  onLoad={()=>setIframeLoaded(true)}
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                />
-                {/* Single unified overlay: handles clicks AND renders pins. z-index above iframe. */}
-                <div
-                  onClick={handleCanvasClick}
-                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:isPlacingPin?"auto":"none",borderRadius:12,zIndex:20}}
-                />
-                {/* Pin markers — always on top, pointer-events auto so they're clickable */}
-                <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:30}}>
-                  {processedPins.map(pin=>(
-                    <div
-                      key={pin.id}
-                      onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}}
-                      style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}
-                    >
-                      <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
-                    </div>
-                  ))}
-                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+              <div style={{position:"relative",width:"100%",minHeight:"calc(100vh - 94px)",borderRadius:12,border:"1px solid "+t.border,background:"#fff"}}>
+                {/* Toggle bar */}
+                <div style={{position:"sticky",top:0,zIndex:25,display:"flex",gap:6,padding:"8px 12px",background:t.bgAlt,borderBottom:"1px solid "+t.border,borderRadius:"12px 12px 0 0",alignItems:"center"}}>
+                  <button onClick={()=>{setPreviewMode("screenshot");setPreviewLoaded(false);setPreviewError(false);}} style={{padding:"4px 12px",borderRadius:6,border:"1px solid "+(previewMode==="screenshot"?t.accent:t.border),background:previewMode==="screenshot"?t.accentLight:"transparent",color:previewMode==="screenshot"?t.accent:t.textMuted,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                    <Icon name="image" size={12}/> Screenshot Mode</button>
+                  <button onClick={()=>setPreviewMode("live")} style={{padding:"4px 12px",borderRadius:6,border:"1px solid "+(previewMode==="live"?t.accent:t.border),background:previewMode==="live"?t.accentLight:"transparent",color:previewMode==="live"?t.accent:t.textMuted,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                    <Icon name="globe" size={12}/> Live Preview</button>
+                  <div style={{flex:1}}/>
+                  <a href={projUrl} target="_blank" rel="noopener noreferrer" style={{padding:"4px 12px",borderRadius:6,border:"1px solid "+t.border,color:t.textSecondary,fontSize:11,fontWeight:500,textDecoration:"none",display:"flex",alignItems:"center",gap:4}}>
+                    <Icon name="eye" size={12}/> Open Site</a>
+                  {previewMode==="screenshot"&&<button onClick={()=>{setPreviewLoaded(false);setPreviewError(false);const d=DEVICES.find(x=>x.id===selectedDevice)||DEVICES[0];setPreviewUrl(`https://image.thum.io/get/width/${d.px}/fullpage/noanimate/${projUrl}?t=${Date.now()}`);}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid "+t.border,color:t.textMuted,fontSize:11,cursor:"pointer",background:"transparent",display:"flex",alignItems:"center",gap:4}}>
+                    <Icon name="camera" size={12}/> Refresh</button>}
+                  {previewMode==="live"&&<div style={{fontSize:10,color:t.warn,display:"flex",alignItems:"center",gap:4}}><Icon name="alert" size={11} color={t.warn}/> Pins are viewport-relative in live mode</div>}
                 </div>
-                {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12,zIndex:40}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
+
+                {previewMode==="screenshot"?(
+                  <div style={{position:"relative"}} onClick={handleCanvasClick}>
+                    {previewUrl&&!previewError&&<img src={previewUrl} alt="Website preview" style={{width:"100%",display:"block",borderRadius:"0 0 12px 12px",userSelect:"none",pointerEvents:"none"}}
+                      onLoad={()=>setPreviewLoaded(true)}
+                      onError={()=>setPreviewError(true)}
+                    />}
+                    {!previewLoaded&&!previewError&&<div style={{padding:60,textAlign:"center"}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 12px"}}/><p style={{color:t.textMuted,fontSize:12}}>Capturing full-page screenshot...</p><p style={{color:t.textMuted,fontSize:10,marginTop:4}}>This may take a moment for large pages</p></div>}
+                    {previewError&&<div style={{padding:40,textAlign:"center"}}><Icon name="alert" size={28} color={t.textMuted}/><p style={{color:t.textSecondary,fontSize:13,marginTop:12,marginBottom:4}}>Screenshot failed to load</p><p style={{color:t.textMuted,fontSize:11,marginBottom:16}}>Try Live Preview mode, or upload a screenshot manually</p><button onClick={()=>{fileInputRef.current?.click();}} style={{...S.btnGhost,margin:"0 auto"}}><Icon name="upload" size={13}/> Upload Screenshot</button></div>}
+                    {/* Pins on the screenshot image - scroll with it */}
+                    {previewLoaded&&<div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+                      {processedPins.map(pin=>(
+                        <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}>
+                          <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
+                        </div>
+                      ))}
+                      {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+                    </div>}
+                  </div>
+                ):(
+                  /* Live iframe mode - pins are viewport-relative */
+                  <div style={{position:"relative",height:"calc(100vh - 136px)"}}>
+                    <iframe ref={iframeRef} src={projUrl}
+                      style={{width:"100%",height:"100%",border:"none",background:"#fff",pointerEvents:isPlacingPin?"none":"auto"}}
+                      onLoad={()=>setIframeLoaded(true)}
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"/>
+                    <div onClick={handleCanvasClick} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:isPlacingPin?"auto":"none",zIndex:20}}/>
+                    <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:30}}>
+                      {processedPins.map(pin=>(
+                        <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}>
+                          <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
+                        </div>
+                      ))}
+                      {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+                    </div>
+                    {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12,zIndex:40}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
+                  </div>
+                )}
               </div>
 
             :projImage?
