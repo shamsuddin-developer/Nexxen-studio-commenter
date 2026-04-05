@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import html2canvas from "html2canvas";
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
@@ -16,7 +18,7 @@ const DEVICES = [{id:"desktop",label:"Desktop",width:"100%",px:1440,icon:"M"},{i
 const PRIORITIES = [{id:"high",label:"High",color:"#EF4444",bg:"#FEF2F2"},{id:"medium",label:"Medium",color:"#F59E0B",bg:"#FFFBEB"},{id:"low",label:"Low",color:"#6B7280",bg:"#F3F4F6"}];
 const SORT_OPTIONS = [{id:"newest",label:"Latest"},{id:"oldest",label:"Oldest"},{id:"priority",label:"Priority"}];
 const ADMIN_EMAIL = "admin@nexxenstudio.com";
-const LOGO_SRC = "data:image/png;base64,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";
+const LOGO_SRC = "data:image/png;base64,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";
 const fmtDate = d => new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const fmtTime = d => new Date(d).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
 const fmtFull = d => fmtDate(d)+" at "+fmtTime(d);
@@ -71,11 +73,11 @@ const DB = {
   },
 };
 
-// ─── Theme (Prodify-inspired purple/lavender) ───
+// ─── Theme ───
 const themes = {
   light: {
-    bg:"#F6F4FB",bgAlt:"#FFFFFF",bgMuted:"#EFECF7",bgHover:"#E8E4F2",sidebar:"#FDFCFF",
-    border:"#E4E0EF",borderLight:"#F0EDF8",borderFocus:"#8B5CF6",
+    bg:"#FAFAF9",bgAlt:"#FFFFFF",bgMuted:"#F4F2FA",bgHover:"#EEEAF6",sidebar:"#FFFFFF",
+    border:"#E8E4F4",borderLight:"#F0EDF8",borderFocus:"#8B5CF6",
     text:"#1E1B2E",textSecondary:"#6B6580",textMuted:"#9E97B3",textInverse:"#FFFFFF",
     accent:"#8B5CF6",accentHover:"#7C3AED",accentLight:"#EDE9FE",accentMuted:"rgba(139,92,246,0.06)",
     accentSoft:"#C4B5FD",
@@ -144,52 +146,96 @@ const Icon = ({name,size=16,color="currentColor"}) => {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{d[name]}</svg>;
 };
 
-// ─── Screenshot with pin marker ───
-function captureRegion(src,px,py,pinNum,cb){
-  try{
-  const img=new Image();img.crossOrigin="anonymous";
-  img.onload=()=>{try{const c=document.createElement("canvas"),x=c.getContext("2d");c.width=360;c.height=220;
-    const sx=Math.max(0,Math.min((px/100)*img.width-180,img.width-360));
-    const sy=Math.max(0,Math.min((py/100)*img.height-110,img.height-220));
-    x.drawImage(img,sx,sy,360,220,0,0,360,220);
-    x.fillStyle="rgba(0,0,0,0.15)";x.fillRect(0,0,360,220);
-    const mx=(px/100)*img.width-sx,my=(py/100)*img.height-sy;
-    x.save();x.globalCompositeOperation="destination-out";x.beginPath();x.arc(mx,my,40,0,Math.PI*2);x.fill();x.restore();
-    x.fillStyle="#8B5CF6";x.strokeStyle="#fff";x.lineWidth=2;x.beginPath();x.arc(mx,my,12,0,Math.PI*2);x.fill();x.stroke();
-    x.fillStyle="#fff";x.font="bold 11px sans-serif";x.textAlign="center";x.textBaseline="middle";x.fillText(String(pinNum),mx,my);
-    x.strokeStyle="rgba(139,92,246,0.5)";x.lineWidth=2;x.strokeRect(1,1,358,218);
-    cb(c.toDataURL("image/jpeg",0.5));}catch(e){console.error("Capture error:",e);cb(null);}};
-  img.onerror=()=>cb(null);img.src=src;
-  }catch(e){console.error("Image load error:",e);cb(null);}
+// ─── Screenshot: capture the visible canvas area and draw a numbered pin marker ───
+async function captureCanvasScreenshot(canvasEl, pinXpct, pinYpct, pinNum) {
+  try {
+    const canvas = await html2canvas(canvasEl, {
+      useCORS: true,
+      allowTaint: true,
+      scale: 1,
+      logging: false,
+      backgroundColor: "#ffffff",
+    });
+    const ctx = canvas.getContext("2d");
+    const mx = (pinXpct / 100) * canvas.width;
+    const my = (pinYpct / 100) * canvas.height;
+    // Spotlight ring
+    ctx.save();
+    ctx.strokeStyle = "rgba(139,92,246,0.6)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(mx, my, 22, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    // Pin circle
+    ctx.fillStyle = "#8B5CF6";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(mx, my, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Number label
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(pinNum), mx, my);
+    return canvas.toDataURL("image/jpeg", 0.75);
+  } catch (e) {
+    console.error("Screenshot capture failed:", e);
+    return null;
+  }
 }
-function genIframeShot(url,px,py,pinNum,cb){
-  try{
-  const c=document.createElement("canvas"),x=c.getContext("2d");c.width=360;c.height=220;
-  const rr=(ctx,rx,ry,rw,rh,r)=>{ctx.beginPath();ctx.moveTo(rx+r,ry);ctx.lineTo(rx+rw-r,ry);ctx.quadraticCurveTo(rx+rw,ry,rx+rw,ry+r);ctx.lineTo(rx+rw,ry+rh-r);ctx.quadraticCurveTo(rx+rw,ry+rh,rx+rw-r,ry+rh);ctx.lineTo(rx+r,ry+rh);ctx.quadraticCurveTo(rx,ry+rh,rx,ry+rh-r);ctx.lineTo(rx,ry+r);ctx.quadraticCurveTo(rx,ry,rx+r,ry);ctx.closePath();};
-  x.fillStyle="#F6F4FB";x.fillRect(0,0,360,220);
-  x.fillStyle="#fff";x.fillRect(0,0,360,32);
-  x.strokeStyle="#E4E0EF";x.lineWidth=1;x.beginPath();x.moveTo(0,32);x.lineTo(360,32);x.stroke();
-  [["#FF5F57",14],["#FFBD2E",28],["#28CA42",42]].forEach(([cl,cx])=>{x.fillStyle=cl;x.beginPath();x.arc(cx,16,4,0,Math.PI*2);x.fill();});
-  x.fillStyle="#EFECF7";rr(x,54,7,250,18,4);x.fill();
-  x.fillStyle="#9E97B3";x.font="10px sans-serif";x.textAlign="left";
-  x.fillText(url.length>38?url.substring(0,38)+"...":url,62,20);
-  x.fillStyle="#E4E0EF";for(let i=0;i<7;i++){rr(x,18,44+i*22,100+Math.random()*180,8,3);x.fill();}
-  const mx=(px/100)*360,my=32+(py/100)*188;
-  x.fillStyle="#8B5CF6";x.strokeStyle="#fff";x.lineWidth=2;x.beginPath();x.arc(mx,my,14,0,Math.PI*2);x.fill();x.stroke();
-  x.fillStyle="#fff";x.font="bold 12px sans-serif";x.textAlign="center";x.textBaseline="middle";x.fillText(String(pinNum),mx,my);
-  x.strokeStyle="rgba(139,92,246,0.3)";x.lineWidth=1;x.setLineDash([4,4]);
-  x.beginPath();x.moveTo(mx,32);x.lineTo(mx,220);x.stroke();
-  x.beginPath();x.moveTo(0,my);x.lineTo(360,my);x.stroke();
-  x.setLineDash([]);x.fillStyle="rgba(139,92,246,0.85)";rr(x,mx-50,my+20,100,20,4);x.fill();
-  x.fillStyle="#fff";x.font="10px sans-serif";x.fillText(Math.round(px)+"%, "+Math.round(py)+"%",mx,my+30);
-  cb(c.toDataURL("image/jpeg",0.5));
-  }catch(e){console.error("Screenshot error:",e);cb(null);}
+
+// ─── Screenshot for image projects: crop around pin and draw marker ───
+function captureImageRegion(src, px, py, pinNum, cb) {
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        const x = c.getContext("2d");
+        c.width = 400; c.height = 240;
+        const sx = Math.max(0, Math.min((px / 100) * img.width - 200, img.width - 400));
+        const sy = Math.max(0, Math.min((py / 100) * img.height - 120, img.height - 240));
+        x.drawImage(img, sx, sy, 400, 240, 0, 0, 400, 240);
+        const mx = (px / 100) * img.width - sx;
+        const my = (py / 100) * img.height - sy;
+        // Spotlight ring
+        x.strokeStyle = "rgba(139,92,246,0.6)";
+        x.lineWidth = 3;
+        x.beginPath();
+        x.arc(mx, my, 22, 0, Math.PI * 2);
+        x.stroke();
+        // Pin circle
+        x.fillStyle = "#8B5CF6";
+        x.strokeStyle = "#fff";
+        x.lineWidth = 2.5;
+        x.beginPath();
+        x.arc(mx, my, 14, 0, Math.PI * 2);
+        x.fill();
+        x.stroke();
+        // Number
+        x.fillStyle = "#fff";
+        x.font = "bold 13px sans-serif";
+        x.textAlign = "center";
+        x.textBaseline = "middle";
+        x.fillText(String(pinNum), mx, my);
+        cb(c.toDataURL("image/jpeg", 0.75));
+      } catch (e) { console.error("Image region capture error:", e); cb(null); }
+    };
+    img.onerror = () => cb(null);
+    img.src = src;
+  } catch (e) { console.error("Image load error:", e); cb(null); }
 }
 
 // ─── Main Application ───
 export default function NexxenCommenter() {
   const [theme,setTheme]=useState("light");
   const [user,setUser]=useState(null);
+  const [authMode,setAuthMode]=useState("login");
   const [view,setView]=useState("loading");
   const [projects,setProjects]=useState([]);
   const [currentProject,setCurrentProject]=useState(null);
@@ -215,7 +261,6 @@ export default function NexxenCommenter() {
   const [uploadedImage,setUploadedImage]=useState(null);
   const [toast,setToast]=useState("");
   const [loginForm,setLoginForm]=useState({name:"",email:"",password:""});
-  const [authMode,setAuthMode]=useState("login");
   const [iframeLoaded,setIframeLoaded]=useState(false);
   const [newMemberEmail,setNewMemberEmail]=useState("");
   const [newMemberRole,setNewMemberRole]=useState("member");
@@ -226,6 +271,8 @@ export default function NexxenCommenter() {
   const fileInputRef=useRef(null);
   const attachRef=useRef(null);
   const iframeRef=useRef(null);
+  // ref to the canvas content area for html2canvas
+  const canvasContentRef=useRef(null);
   const t=themes[theme];
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
   const css="@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}";
@@ -281,7 +328,13 @@ export default function NexxenCommenter() {
   const updateMemberRole=async(email,role)=>{const p=currentProject||clientProject;if(p){await DB.updateMemberRole(p.id,email,role);setMembers(prev=>prev.map(m=>m.email===email?{...m,role}:m));}};
 
   // ─── Pins & Comments ───
-  const handleCanvasClick=e=>{if(!isPlacingPin)return;const r=e.currentTarget.getBoundingClientRect();setPendingPinPos({x:((e.clientX-r.left)/r.width)*100,y:((e.clientY-r.top)/r.height)*100});setIsPlacingPin(false);};
+  // FIX 1: Store click position as percentage of the content container (not viewport)
+  const handleCanvasClick=e=>{
+    if(!isPlacingPin)return;
+    const r=e.currentTarget.getBoundingClientRect();
+    setPendingPinPos({x:((e.clientX-r.left)/r.width)*100,y:((e.clientY-r.top)/r.height)*100});
+    setIsPlacingPin(false);
+  };
 
   const submitNewPin=async()=>{
     if(!newComment.trim()||!pendingPinPos)return;
@@ -289,19 +342,20 @@ export default function NexxenCommenter() {
     const author=clientMode?(newAuthor.trim()||"Guest"):(user?.name||"Anonymous");
     const pin=await DB.createPin({project_id:proj.id,x:pendingPinPos.x,y:pendingPinPos.y,status:"open",priority:newPriority,screenshot:null,device:selectedDevice});
     if(!pin){showToast("Failed to create pin. Check browser console for details.");return;}
-    // Add comment with optional attachment
     let aName=null,aData=null,aType=null;
     if(attachment){aName=attachment.name;aData=attachment.data;aType=attachment.type;}
     await DB.addComment(pin.id,author,newComment.trim(),aName,aData,aType);
-    // Generate screenshot first, then add pin to state
+
+    // FIX 2: Capture a real screenshot of the visible canvas area
     const num=pins.length+1;
-    const generateShot=()=>new Promise(resolve=>{
-      if(proj.type==="image"&&proj.image_data)captureRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num,d=>resolve(d));
-      else if(proj.type==="url"&&proj.url)genIframeShot(proj.url,pendingPinPos.x,pendingPinPos.y,num,d=>resolve(d));
-      else resolve(null);
-    });
-    const shotData=await generateShot();
+    let shotData=null;
+    if(proj.type==="image"&&proj.image_data){
+      shotData=await new Promise(resolve=>captureImageRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num,resolve));
+    } else if(canvasContentRef.current){
+      shotData=await captureCanvasScreenshot(canvasContentRef.current,pendingPinPos.x,pendingPinPos.y,num);
+    }
     if(shotData){DB.updatePinScreenshot(pin.id,shotData);}
+
     const cmt={author,text:newComment.trim(),timestamp:new Date().toISOString(),attachmentName:aName,attachmentData:aData,attachmentType:aType};
     setPins(prev=>[...prev,{...pin,screenshot:shotData,comments:[cmt]}]);
     setPendingPinPos(null);setNewComment("");setNewPriority("medium");setAttachment(null);setSelectedPin(pin.id);
@@ -360,14 +414,14 @@ export default function NexxenCommenter() {
     modal:{position:"fixed",inset:0,background:t.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(8px)"},
     modalContent:{background:t.bgAlt,borderRadius:18,padding:28,width:480,border:"1px solid "+t.border,boxShadow:t.shadowXl},
     label:{fontSize:12,color:t.textSecondary,fontWeight:600,display:"block",marginBottom:5},
-    badge:(c,bg)=>({background:bg,color:c,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}),
-    pill:{padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid transparent",transition:"all .15s"},
+    badge:(c,bg)=>({background:bg,color:c,padding:"2px 8px",borderRadius:12,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}),
+    pill:{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid transparent",transition:"all .15s",display:"inline-flex",alignItems:"center",gap:4},
   };
   const Logo=({size=32})=><div style={{...S.logoMark,width:size,height:size}}><img src={LOGO_SRC} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>;
   const PriBadge=({pri})=>{const p=PRIORITIES.find(x=>x.id===pri)||PRIORITIES[1];return<span style={{...S.badge(p.color,p.bg),gap:3}}><Icon name="flag" size={10} color={p.color}/>{p.label}</span>;};
   const DevBadge=({dev})=>{const ic=dev==="desktop"?"monitor":dev==="tablet"?"tablet":"phone";return<span style={{...S.badge(t.accent,t.accentLight),gap:3}}><Icon name={ic} size={10}/>{dev}</span>;};
 
-  // ─── Error ───
+  // ─── Error / Loading ───
   if(view==="error")return(<div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center"}}><link href={fontLink} rel="stylesheet"/><style>{css}</style><div style={{textAlign:"center",maxWidth:440,padding:24}}><Icon name="alert" size={40} color={t.danger}/><h2 style={{fontSize:20,fontWeight:700,marginTop:16,marginBottom:8}}>Database Not Connected</h2><p style={{color:t.textSecondary,fontSize:14,lineHeight:1.6,marginBottom:20}}>Create a <code style={{background:t.bgMuted,padding:"2px 6px",borderRadius:4}}>.env</code> file:</p><div style={{background:t.bgMuted,borderRadius:12,padding:16,textAlign:"left",fontSize:13,fontFamily:"monospace",lineHeight:1.8,border:"1px solid "+t.border}}>VITE_SUPABASE_URL=https://your-project.supabase.co<br/>VITE_SUPABASE_ANON_KEY=your-key-here</div></div></div>);
   if(view==="loading")return(<div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center"}}><link href={fontLink} rel="stylesheet"/><style>{css}</style><div style={{textAlign:"center"}}><div style={{width:36,height:36,border:"3px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 14px"}}/><p style={{color:t.textMuted,fontSize:13}}>Loading...</p></div></div>);
 
@@ -406,7 +460,6 @@ export default function NexxenCommenter() {
           <button onClick={()=>setShowNewProject(true)} style={S.btn}><Icon name="plus" size={14}/> New Project</button>
         </div></div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:"28px 20px"}}>
-        {/* Stats */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:28}}>
           {[{label:"Projects",value:projects.length,color:t.accent,icon:"grid"},{label:"Open Feedback",value:openFB,color:t.danger,icon:"message"},{label:"Active This Week",value:activeW,color:t.success,icon:"eye"}].map((s,i)=>
             <div key={i} style={{background:t.bgAlt,borderRadius:14,border:"1px solid "+t.border,padding:"20px 22px",display:"flex",justifyContent:"space-between",alignItems:"center",animation:"fadeIn .3s ease "+i*.08+"s both"}}>
@@ -425,7 +478,6 @@ export default function NexxenCommenter() {
               <div style={{display:"flex",gap:6,alignItems:"center"}}>
                 <span style={S.badge(t.accent,t.accentLight)}>{p.feedback_count||0} pins</span>
                 <button onClick={e=>{e.stopPropagation();deleteProject(p.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:t.textMuted,opacity:0.4}}><Icon name="trash" size={14}/></button></div></div></div></div>)}</div></div>
-      {/* New Project Modal */}
       {showNewProject&&<div style={S.modal} onClick={()=>setShowNewProject(false)}><div style={{...S.modalContent,animation:"slideUp .25s ease"}} onClick={e=>e.stopPropagation()}>
         <h2 style={{fontSize:18,fontWeight:800,marginBottom:3}}>New Project</h2><p style={{color:t.textMuted,fontSize:13,marginBottom:22}}>Add a website URL or upload a screenshot.</p>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -449,7 +501,7 @@ export default function NexxenCommenter() {
       {/* Toolbar */}
       <div style={S.header}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          {!clientMode&&<button onClick={()=>{setView("dashboard");setCurrentProject(null);}} style={{...S.btnGhost,padding:"5px 10px",borderRadius:8}}><Icon name="back" size={14}/></button>}
+          {!clientMode&&<button onClick={()=>{setView("dashboard");setCurrentProject(null);}} style={{...S.btnGhost,padding:"6px 10px",borderRadius:8}}><Icon name="back" size={14}/></button>}
           <Logo/><div><div style={{fontSize:14,fontWeight:700}}>{activeProj.name}</div><div style={{fontSize:10,color:t.textMuted,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clientMode?"Review Mode":(projUrl||"Image Upload")}</div></div></div>
         {/* Device switcher */}
         <div style={{display:"flex",gap:2,background:t.bgMuted,borderRadius:10,padding:3}}>
@@ -464,26 +516,71 @@ export default function NexxenCommenter() {
           <button onClick={toggleTheme} style={{...S.btnGhost,padding:"6px 10px",borderRadius:8}}><Icon name={theme==="light"?"moon":"sun"} size={14}/></button>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{...S.btnGhost,padding:"6px 10px",borderRadius:8,background:sidebarOpen?t.accentLight:"transparent",borderColor:sidebarOpen?t.accent:t.border,color:sidebarOpen?t.accent:t.textSecondary}}><Icon name="message" size={14}/> <span style={{fontSize:12,fontWeight:700}}>{processedPins.length}</span></button>
         </div></div>
-      {/* Main */}
+
+      {/* Main layout */}
       <div style={{display:"flex",height:"calc(100vh - 54px)"}}>
-        {/* Canvas */}
+
+        {/* ─── Canvas ─── */}
         <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center",padding:20,background:t.canvasBg,cursor:isPlacingPin?"crosshair":"default"}}>
           <div style={{width:device.width,maxWidth:"100%",position:"relative",transition:"width .3s ease"}}>
+
+            {/* FIX 1: URL project — pins overlay is absolutely positioned over the iframe,
+                both sharing the same parent with position:relative and explicit height.
+                Pins use percentage coords relative to this container, not the viewport. */}
             {projType==="url"&&projUrl?
-              <div style={{position:"relative",width:"100%",height:"calc(100vh - 94px)",borderRadius:12,border:"1px solid "+t.border,background:"#fff"}}>
-                <iframe ref={iframeRef} src={projUrl} style={{width:"100%",height:"100%",border:"none",background:"#fff",pointerEvents:isPlacingPin?"none":"auto",borderRadius:12}} onLoad={()=>setIframeLoaded(true)} sandbox="allow-scripts allow-same-origin allow-forms allow-popups"/>
-                <div onClick={handleCanvasClick} style={{position:"absolute",inset:0,pointerEvents:isPlacingPin?"auto":"none",borderRadius:12}}>
-                  {processedPins.map(pin=><PinMarker key={pin.id} pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>)}
-                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}</div>
-                {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
+              <div
+                ref={canvasContentRef}
+                style={{position:"relative",width:"100%",height:"calc(100vh - 94px)",borderRadius:12,border:"1px solid "+t.border,background:"#fff",overflow:"hidden"}}
+              >
+                <iframe
+                  ref={iframeRef}
+                  src={projUrl}
+                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none",background:"#fff",pointerEvents:isPlacingPin?"none":"auto",borderRadius:12}}
+                  onLoad={()=>setIframeLoaded(true)}
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
+                {/* Click-capture + pin overlay — same size as iframe, pins stay fixed */}
+                <div
+                  onClick={handleCanvasClick}
+                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:isPlacingPin?"auto":"none",borderRadius:12,zIndex:10}}
+                >
+                  {processedPins.map(pin=>(
+                    <PinMarker key={pin.id} pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
+                  ))}
+                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+                </div>
+                {/* Always-visible pin markers (non-placing mode) */}
+                {!isPlacingPin&&<div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:9}}>
+                  {processedPins.map(pin=>(
+                    <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto",zIndex:selectedPin===pin.id?100:10}}>
+                      <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
+                    </div>
+                  ))}
+                </div>}
+                {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12,zIndex:20}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
               </div>
+
             :projImage?
-              <div style={{position:"relative",borderRadius:12,border:"1px solid "+t.border}} onClick={handleCanvasClick}>
+              <div
+                ref={canvasContentRef}
+                style={{position:"relative",borderRadius:12,border:"1px solid "+t.border,display:"inline-block",width:"100%"}}
+                onClick={handleCanvasClick}
+              >
                 <img src={projImage} style={{width:"100%",display:"block",borderRadius:12}} alt="Project"/>
-                {processedPins.map(pin=><PinMarker key={pin.id} pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>)}
-                {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}</div>
+                {/* FIX 1: pins overlay sits on top of the image, same dimensions */}
+                <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+                  {processedPins.map(pin=>(
+                    <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}>
+                      <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
+                    </div>
+                  ))}
+                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+                </div>
+              </div>
+
             :<div style={{border:"2px dashed "+t.border,borderRadius:18,padding:56,textAlign:"center",background:t.bgAlt}}><Icon name="camera" size={36} color={t.textMuted}/><h3 style={{fontSize:16,fontWeight:600,marginTop:14,marginBottom:6}}>No content yet</h3><p style={{color:t.textMuted,fontSize:13,marginBottom:18}}>Upload a screenshot or add a website URL</p>{!clientMode&&<button onClick={()=>fileInputRef.current?.click()} style={S.btn}><Icon name="upload" size={14}/> Upload</button>}</div>}
-            {/* New pin form - positioned near the pin */}
+
+            {/* New pin form */}
             {pendingPinPos&&canAdd&&<div style={{position:"absolute",left:Math.min(pendingPinPos.x,65)+"%",top:pendingPinPos.y+"%",transform:"translate(20px,-50%)",background:t.bgAlt,borderRadius:16,padding:18,border:"1px solid "+t.accent,boxShadow:t.shadowXl,width:340,zIndex:999,animation:"fadeIn .15s ease"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:22,height:22,borderRadius:"50%",background:t.accent,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="pin" size={11} color="#fff"/></div><span style={{fontSize:13,fontWeight:700}}>Add Comment</span></div>
                 <button onClick={()=>{setPendingPinPos(null);setNewComment("");setAttachment(null);}} style={{background:"none",border:"none",cursor:"pointer",color:t.textMuted}}><Icon name="x" size={14}/></button></div>
@@ -497,38 +594,75 @@ export default function NexxenCommenter() {
                 <div style={{flex:1}}/>
                 <button onClick={submitNewPin} disabled={!newComment.trim()} style={{...S.btn,opacity:newComment.trim()?1:0.4,cursor:newComment.trim()?"pointer":"not-allowed",padding:"7px 16px"}}><Icon name="send" size={12}/> Submit</button>
               </div></div>}
-          </div></div>
-        {/* Sidebar */}
+          </div>
+        </div>
+
+        {/* ─── Sidebar ─── */}
         {sidebarOpen&&<div style={{width:370,background:t.bgAlt,borderLeft:"1px solid "+t.border,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
-          {/* Header + filters */}
-          <div style={{padding:"12px 14px",borderBottom:"1px solid "+t.border}}>
+
+          {/* FIX 3: Redesigned filter bar — clean, compact, badge counts */}
+          <div style={{padding:"12px 14px 10px",borderBottom:"1px solid "+t.border}}>
+
+            {/* Row 1: title + sort */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <h3 style={{fontSize:14,fontWeight:700}}>Feedback <span style={{color:t.textMuted,fontWeight:500}}>({pins.length})</span></h3>
-              <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...S.input,width:"auto",padding:"4px 8px",fontSize:11,borderRadius:6,cursor:"pointer"}}>
-                  {SORT_OPTIONS.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select>
-              </div></div>
-            {/* Status filter */}
-            <div style={{display:"flex",gap:3,background:t.bgMuted,borderRadius:8,padding:2,marginBottom:8}}>
-              {["all","open","resolved"].map(f=><button key={f} onClick={()=>setFilterStatus(f)} style={{flex:1,background:filterStatus===f?t.bgAlt:"transparent",border:"none",color:filterStatus===f?t.text:t.textMuted,borderRadius:6,padding:"4px 0",fontSize:11,cursor:"pointer",fontWeight:600,boxShadow:filterStatus===f?t.shadow:"none",textTransform:"capitalize"}}>{f} ({f==="all"?pins.length:pins.filter(p=>p.status===f).length})</button>)}</div>
-            {/* Device filter */}
-            <div style={{display:"flex",gap:4,marginBottom:6}}>
-              {[{id:"all",label:"All Devices"},...DEVICES].map(d=>{const isAct=deviceFilter===d.id;return<button key={d.id} onClick={()=>setDeviceFilter(d.id)} style={{...S.pill,background:isAct?t.accentLight:t.bgMuted,color:isAct?t.accent:t.textMuted,borderColor:isAct?t.accentSoft:"transparent",fontSize:10}}>
-                {d.id!=="all"&&<Icon name={d.id==="desktop"?"monitor":d.id==="tablet"?"tablet":"phone"} size={10}/>} {d.label||d.id}</button>;})}
+              <h3 style={{fontSize:14,fontWeight:700,margin:0}}>
+                Feedback
+                <span style={{marginLeft:6,background:t.accentLight,color:t.accent,borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{pins.length}</span>
+              </h3>
+              <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{background:t.bgMuted,border:"1px solid "+t.border,borderRadius:8,padding:"4px 8px",fontSize:11,color:t.text,cursor:"pointer",outline:"none",fontFamily:"inherit",fontWeight:600}}>
+                {SORT_OPTIONS.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
             </div>
-            {/* Priority filter */}
-            <div style={{display:"flex",gap:4}}>
-              <button onClick={()=>setFilterStatus(filterStatus==="all"?"all":filterStatus)} style={{...S.pill,background:!["high","medium","low"].includes(filterStatus)?t.bgMuted:t.bgMuted,color:!["high","medium","low"].includes(filterStatus)?t.textSecondary:t.textMuted,fontSize:10}} onClick={()=>{if(sortBy!=="priority")setSortBy("priority");else setSortBy("newest");}}>
-                <Icon name="sort" size={10}/> {sortBy==="priority"?"By Priority":"Sort Priority"}</button>
-              {PRIORITIES.map(p=>{const ct=pins.filter(x=>x.priority===p.id).length;return<button key={p.id} onClick={()=>setFilterStatus(filterStatus===p.id?"all":p.id)} style={{...S.pill,background:filterStatus===p.id?p.bg:t.bgMuted,color:filterStatus===p.id?p.color:t.textMuted,borderColor:filterStatus===p.id?p.color:"transparent",fontSize:10}}><Icon name="flag" size={9} color={filterStatus===p.id?p.color:t.textMuted}/> {p.label} ({ct})</button>;})}
+
+            {/* Row 2: Status tabs */}
+            <div style={{display:"flex",gap:2,background:t.bgMuted,borderRadius:8,padding:2,marginBottom:8}}>
+              {[
+                {id:"all",label:"All",count:pins.length},
+                {id:"open",label:"Open",count:pins.filter(p=>p.status==="open").length},
+                {id:"resolved",label:"Resolved",count:pins.filter(p=>p.status==="resolved").length},
+              ].map(f=>(
+                <button key={f.id} onClick={()=>setFilterStatus(f.id)} style={{flex:1,background:filterStatus===f.id?t.bgAlt:"transparent",border:"none",color:filterStatus===f.id?t.text:t.textMuted,borderRadius:6,padding:"5px 4px",fontSize:11,cursor:"pointer",fontWeight:600,boxShadow:filterStatus===f.id?t.shadow:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                  {f.label}
+                  <span style={{background:filterStatus===f.id?t.accent:"transparent",color:filterStatus===f.id?"#fff":t.textMuted,borderRadius:8,padding:"0px 5px",fontSize:10,fontWeight:700,minWidth:16,textAlign:"center"}}>{f.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Row 3: Device + Priority filters in one clean row */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {/* Device pills */}
+              {[{id:"all",label:"All",icon:null},...DEVICES].map(d=>{
+                const isAct=deviceFilter===d.id;
+                const ic=d.id==="desktop"?"monitor":d.id==="tablet"?"tablet":d.id==="mobile"?"phone":null;
+                return(
+                  <button key={d.id} onClick={()=>setDeviceFilter(d.id)} style={{...S.pill,background:isAct?t.accentLight:t.bgMuted,color:isAct?t.accent:t.textMuted,borderColor:isAct?t.accentSoft:"transparent",fontSize:10,padding:"3px 9px"}}>
+                    {ic&&<Icon name={ic} size={10} color={isAct?t.accent:t.textMuted}/>}
+                    {d.label||d.id}
+                  </button>
+                );
+              })}
+              {/* Divider dot */}
+              <span style={{color:t.border,fontSize:14,lineHeight:"22px",userSelect:"none"}}>·</span>
+              {/* Priority pills */}
+              {PRIORITIES.map(p=>{
+                const ct=pins.filter(x=>x.priority===p.id).length;
+                const isAct=filterStatus===p.id;
+                return(
+                  <button key={p.id} onClick={()=>setFilterStatus(isAct?"all":p.id)} style={{...S.pill,background:isAct?p.bg:t.bgMuted,color:isAct?p.color:t.textMuted,borderColor:isAct?p.color:"transparent",fontSize:10,padding:"3px 9px"}}>
+                    <Icon name="flag" size={9} color={isAct?p.color:t.textMuted}/>
+                    {p.label}
+                    <span style={{background:isAct?"rgba(0,0,0,0.1)":"rgba(0,0,0,0.06)",borderRadius:6,padding:"0 4px",fontSize:9,fontWeight:700}}>{ct}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
+
           {/* Pin list */}
           <div style={{flex:1,overflowY:"auto",padding:10}}>
             {processedPins.length===0&&<div style={{textAlign:"center",padding:"36px 16px",color:t.textMuted}}><Icon name="message" size={28} color={t.textMuted}/><p style={{fontSize:13,fontWeight:600,marginTop:10}}>No feedback found</p></div>}
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {processedPins.map((pin,i)=>{const pidx=pins.indexOf(pin),isAct=selectedPin===pin.id;return<div key={pin.id} style={{background:isAct?t.accentMuted:t.bg,borderRadius:12,border:"1px solid "+(isAct?t.accent:t.border),overflow:"hidden",animation:"fadeIn .2s ease "+i*.03+"s both"}}>
-                {/* Pin header */}
                 <div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",borderBottom:"1px solid "+t.borderLight}} onClick={()=>setSelectedPin(isAct?null:pin.id)}>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <span style={{background:pin.status==="resolved"?t.success:t.danger,color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>{pidx+1}</span>
@@ -541,11 +675,8 @@ export default function NexxenCommenter() {
                     {canManage&&<button onClick={e=>{e.stopPropagation();handleResolve(pin.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,color:pin.status==="resolved"?t.success:t.textMuted}}><Icon name="check" size={13}/></button>}
                     {canManage&&<button onClick={e=>{e.stopPropagation();handleDeletePin(pin.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,color:t.textMuted,opacity:0.4}}><Icon name="trash" size={13}/></button>}
                   </div></div>
-                {/* Screenshot - always visible */}
                 {pin.screenshot&&<div style={{padding:"8px 12px",borderBottom:"1px solid "+t.borderLight}}>
-                  <img src={pin.screenshot} style={{width:"100%",borderRadius:8,border:"1px solid "+t.border,cursor:"pointer",display:"block"}} onClick={e=>{e.stopPropagation();setShowScreenshot(pin.screenshot);}} alt="Pin location"/>
-                  <p style={{fontSize:10,color:t.textMuted,marginTop:4}}>Pin location -- click to enlarge</p></div>}
-                {/* Comments */}
+                  <img src={pin.screenshot} style={{width:"100%",borderRadius:8,border:"1px solid "+t.border,cursor:"pointer",display:"block"}} alt="Screenshot" onClick={e=>{e.stopPropagation();setShowScreenshot(pin.screenshot);}}/></div>}
                 <div style={{maxHeight:isAct?400:52,overflow:"hidden",transition:"max-height .25s ease"}}>
                   {pin.comments.map((c,ci)=><div key={ci} style={{padding:"8px 12px",borderBottom:ci<pin.comments.length-1?"1px solid "+t.borderLight:"none"}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
@@ -562,6 +693,7 @@ export default function NexxenCommenter() {
               </div>;})}
             </div></div></div>}
       </div>
+
       {/* Members Modal */}
       {showMembers&&<div style={S.modal} onClick={()=>setShowMembers(false)}><div style={{...S.modalContent,width:540,animation:"slideUp .25s ease",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -574,8 +706,8 @@ export default function NexxenCommenter() {
         <div style={{background:t.bgMuted,borderRadius:10,padding:"10px 14px",marginBottom:16,border:"1px solid "+t.border}}>
           <p style={{fontSize:11,fontWeight:700,color:t.textSecondary,marginBottom:6}}>Roles</p>
           <div style={{fontSize:11,color:t.textMuted,lineHeight:1.8}}>
-            <strong style={{color:t.text}}>Owner</strong> -- Full control &nbsp;|&nbsp; <strong style={{color:t.text}}>Admin</strong> -- Manage members/feedback<br/>
-            <strong style={{color:t.text}}>Member</strong> -- Add feedback to assigned projects &nbsp;|&nbsp; <strong style={{color:t.text}}>Viewer</strong> -- View only</div></div>
+            <strong style={{color:t.text}}>Owner</strong> — Full control &nbsp;|&nbsp; <strong style={{color:t.text}}>Admin</strong> — Manage members/feedback<br/>
+            <strong style={{color:t.text}}>Member</strong> — Add feedback &nbsp;|&nbsp; <strong style={{color:t.text}}>Viewer</strong> — View only</div></div>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {members.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:t.bg,borderRadius:10,border:"1px solid "+t.border}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -588,11 +720,13 @@ export default function NexxenCommenter() {
                 <button onClick={()=>removeMember(m.email)} style={{background:"none",border:"none",cursor:"pointer",color:t.danger,padding:3}}><Icon name="x" size={13}/></button>
               </>:<span style={S.badge(t.textSecondary,t.bgMuted)}>{ROLE_LABELS[m.role]||m.role}</span>}
             </div></div>)}</div></div></div>}
+
       {/* Screenshot Modal */}
-      {showScreenshot&&<div style={S.modal} onClick={()=>setShowScreenshot(null)}><div style={{animation:"slideUp .25s ease",maxWidth:520,width:"90%"}} onClick={e=>e.stopPropagation()}>
+      {showScreenshot&&<div style={S.modal} onClick={()=>setShowScreenshot(null)}><div style={{animation:"slideUp .25s ease",maxWidth:560,width:"90%"}} onClick={e=>e.stopPropagation()}>
         <div style={{background:t.bgAlt,borderRadius:14,overflow:"hidden",border:"1px solid "+t.border,boxShadow:t.shadowXl}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid "+t.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:700}}>Pin Screenshot</span><button onClick={()=>setShowScreenshot(null)} style={{background:"none",border:"none",cursor:"pointer",color:t.textMuted}}><Icon name="x" size={16}/></button></div>
           <img src={showScreenshot} style={{width:"100%",display:"block"}} alt="Screenshot"/></div></div></div>}
+
       {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:t.primary,color:t.textInverse,padding:"10px 20px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999,animation:"fadeIn .2s ease"}}>{toast}</div>}
     </div>);
   }
@@ -605,26 +739,35 @@ function PinMarker({pin,index,isSelected,t,onClick}){
   const[hover,setHover]=useState(false);
   const cm=pin.comments?.[0];
   const pri=PRIORITIES.find(p=>p.id===pin.priority)||PRIORITIES[1];
-  return<div onClick={e=>{e.stopPropagation();onClick(pin);}} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",zIndex:isSelected?100:hover?90:10,transition:"transform .15s"}}>
-    {/* Pin circle */}
-    <div style={{width:28,height:28,borderRadius:"50%",background:c,border:"2.5px solid #fff",boxShadow:isSelected?"0 0 0 3px "+c+",0 2px 8px rgba(0,0,0,0.25)":"0 2px 8px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"box-shadow .15s",transform:hover?"scale(1.15)":"scale(1)"}}>
-      <span style={{color:"#fff",fontSize:11,fontWeight:700,lineHeight:1}}>{index+1}</span>
+  return(
+    <div
+      onClick={e=>{e.stopPropagation();onClick(pin);}}
+      onMouseEnter={()=>setHover(true)}
+      onMouseLeave={()=>setHover(false)}
+      style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",zIndex:isSelected?100:hover?90:10,transition:"transform .15s"}}
+    >
+      <div style={{width:28,height:28,borderRadius:"50%",background:c,border:"2.5px solid #fff",boxShadow:isSelected?"0 0 0 3px "+c+",0 2px 8px rgba(0,0,0,0.25)":"0 2px 8px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"box-shadow .15s",transform:hover?"scale(1.15)":"scale(1)"}}>
+        <span style={{color:"#fff",fontSize:11,fontWeight:700,lineHeight:1}}>{index+1}</span>
+      </div>
+      <div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:pri.color,border:"2px solid #fff"}}/>
+      {hover&&!isSelected&&cm&&<div style={{position:"absolute",left:"50%",bottom:"100%",transform:"translateX(-50%)",marginBottom:8,background:t.bgAlt,borderRadius:12,padding:10,border:"1px solid "+t.border,boxShadow:t.shadowLg,width:230,pointerEvents:"none",zIndex:200}}>
+        {pin.screenshot&&<img src={pin.screenshot} style={{width:"100%",borderRadius:6,marginBottom:6,display:"block",border:"1px solid "+t.border}} alt=""/>}
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}><PriBadge pri={pin.priority}/><DevBadge dev={pin.device}/></div>
+        <div style={{fontSize:11,fontWeight:700,color:t.accent,marginBottom:2}}>{cm.author}</div>
+        <div style={{fontSize:11,color:t.textSecondary,lineHeight:1.4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{cm.text}</div>
+      </div>}
     </div>
-    {/* Priority dot */}
-    <div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:pri.color,border:"2px solid #fff"}}/>
-    {/* Hover tooltip */}
-    {hover&&!isSelected&&cm&&<div style={{position:"absolute",left:"50%",bottom:"100%",transform:"translateX(-50%)",marginBottom:8,background:t.bgAlt,borderRadius:12,padding:10,border:"1px solid "+t.border,boxShadow:t.shadowLg,width:230,pointerEvents:"none"}}>
-      {pin.screenshot&&<img src={pin.screenshot} style={{width:"100%",borderRadius:6,marginBottom:6,display:"block",border:"1px solid "+t.border}} alt=""/>}
-      <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}><PriBadge pri={pin.priority}/><DevBadge dev={pin.device}/></div>
-      <div style={{fontSize:11,fontWeight:700,color:t.accent,marginBottom:2}}>{cm.author}</div>
-      <div style={{fontSize:11,color:t.textSecondary,lineHeight:1.4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{cm.text}</div>
-    </div>}
-  </div>;
+  );
 }
-function PendingMarker({pos,t}){return<div style={{position:"absolute",left:pos.x+"%",top:pos.y+"%",transform:"translate(-50%,-50%)",zIndex:200,animation:"pulse 1s ease infinite",pointerEvents:"none"}}>
-<div style={{width:32,height:32,borderRadius:"50%",background:t.accent,border:"3px solid #fff",boxShadow:"0 0 0 2px "+t.accent+",0 4px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-</div></div>;}
+function PendingMarker({pos,t}){
+  return(
+    <div style={{position:"absolute",left:pos.x+"%",top:pos.y+"%",transform:"translate(-50%,-50%)",zIndex:200,animation:"pulse 1s ease infinite",pointerEvents:"none"}}>
+      <div style={{width:32,height:32,borderRadius:"50%",background:t.accent,border:"3px solid #fff",boxShadow:"0 0 0 2px "+t.accent+",0 4px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </div>
+    </div>
+  );
+}
 function ReplyBox({pinId,onReply,user,clientMode,t,S}){
   const[text,setText]=useState("");const[author,setAuthor]=useState("");const[att,setAtt]=useState(null);const ref=useRef(null);
   const submit=()=>{if(!text.trim())return;onReply(pinId,text.trim(),clientMode?(author.trim()||"Guest"):(user?.name||"Anonymous"),att);setText("");setAtt(null);};
