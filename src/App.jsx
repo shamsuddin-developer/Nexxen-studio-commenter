@@ -24,9 +24,9 @@ const fmtRelative = d => {const diff=Date.now()-new Date(d).getTime();const m=Ma
 const priOrder = {high:0,medium:1,low:2};
 
 const DB = {
-  async findUserByLogin(q,pw){if(!supabase)return null;const{data}=await supabase.from("users").select("*").or("name.eq."+q+",email.eq."+q).eq("password",pw).limit(1).single();return data||null;},
-  async findUserByEmail(e){if(!supabase)return null;const{data}=await supabase.from("users").select("*").eq("email",e).limit(1).single();return data||null;},
-  async createUser(u){if(!supabase)return null;const{data}=await supabase.from("users").insert(u).select().single();return data;},
+  async findUserByLogin(q,pw){if(!supabase)return null;try{const{data}=await supabase.from("users").select("*").or(`name.eq.${q},email.eq.${q}`).eq("password",pw).limit(1).single();return data||null;}catch(e){console.error("Login error:",e);return null;}},
+  async findUserByEmail(e){if(!supabase)return null;try{const{data}=await supabase.from("users").select("*").eq("email",e).limit(1).single();return data||null;}catch{return null;}},
+  async createUser(u){if(!supabase)return null;try{const{data,error}=await supabase.from("users").insert(u).select().single();if(error)console.error("Create user error:",error);return data;}catch(e){console.error(e);return null;}},
   getSession(){try{return JSON.parse(localStorage.getItem("nc-session"));}catch{return null;}},
   setSession(u){localStorage.setItem("nc-session",JSON.stringify(u));},
   clearSession(){localStorage.removeItem("nc-session");},
@@ -37,7 +37,7 @@ const DB = {
     if(!supabase)return[];
     if(isSuper){const{data}=await supabase.from("projects").select("*").order("updated_at",{ascending:false});return data||[];}
     const{data:owned}=await supabase.from("projects").select("*").eq("owner_id",uid).order("updated_at",{ascending:false});
-    const{data:mems}=await supabase.from("members").select("project_id").or("user_id.eq."+uid+",email.eq."+email);
+    const{data:mems}=await supabase.from("members").select("project_id").or(`user_id.eq.${uid},email.eq.${email}`);
     const mIds=(mems||[]).map(m=>m.project_id).filter(id=>!(owned||[]).find(p=>p.id===id));
     let mp=[];if(mIds.length>0){const{data}=await supabase.from("projects").select("*").in("id",mIds);mp=data||[];}
     return[...(owned||[]),...mp].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
@@ -57,16 +57,17 @@ const DB = {
     const{data:cmts}=await supabase.from("comments").select("*").in("pin_id",ids).order("created_at");
     return pins.map(p=>({...p,comments:(cmts||[]).filter(c=>c.pin_id===p.id).map(c=>({author:c.author,text:c.body,timestamp:c.created_at,attachmentName:c.attachment_name,attachmentData:c.attachment_data,attachmentType:c.attachment_type}))}));
   },
-  async createPin(p){if(!supabase)return null;const{data}=await supabase.from("pins").insert({project_id:p.project_id,x:p.x,y:p.y,status:p.status,priority:p.priority||"medium",screenshot:p.screenshot,device:p.device}).select().single();return data;},
+  async createPin(p){if(!supabase)return null;try{const{data,error}=await supabase.from("pins").insert({project_id:p.project_id,x:p.x,y:p.y,status:p.status,priority:p.priority||"medium",screenshot:p.screenshot||null,device:p.device||"desktop"}).select().single();if(error){console.error("Create pin error:",error);return null;}return data;}catch(e){console.error("Pin exception:",e);return null;}},
   async updatePinStatus(id,s){if(supabase)await supabase.from("pins").update({status:s}).eq("id",id);},
   async updatePinPriority(id,p){if(supabase)await supabase.from("pins").update({priority:p}).eq("id",id);},
   async updatePinScreenshot(id,s){if(supabase)await supabase.from("pins").update({screenshot:s}).eq("id",id);},
   async deletePin(id){if(supabase)await supabase.from("pins").delete().eq("id",id);},
   async addComment(pinId,author,text,attName,attData,attType){
     if(!supabase)return null;
-    const row={pin_id:pinId,author,body:text};
+    try{const row={pin_id:pinId,author,body:text};
     if(attName){row.attachment_name=attName;row.attachment_data=attData;row.attachment_type=attType;}
-    const{data}=await supabase.from("comments").insert(row).select().single();return data;
+    const{data,error}=await supabase.from("comments").insert(row).select().single();
+    if(error)console.error("Comment error:",error);return data;}catch(e){console.error(e);return null;}
   },
 };
 
@@ -291,7 +292,7 @@ export default function NexxenCommenter() {
     const proj=currentProject||clientProject;if(!proj)return;
     const author=clientMode?(newAuthor.trim()||"Guest"):(user?.name||"Anonymous");
     const pin=await DB.createPin({project_id:proj.id,x:pendingPinPos.x,y:pendingPinPos.y,status:"open",priority:newPriority,screenshot:null,device:selectedDevice});
-    if(!pin)return;
+    if(!pin){showToast("Failed to create pin. Check browser console for details.");return;}
     // Add comment with optional attachment
     let aName=null,aData=null,aType=null;
     if(attachment){aName=attachment.name;aData=attachment.data;aType=attachment.type;}
@@ -324,7 +325,9 @@ export default function NexxenCommenter() {
   // ─── Filtered & Sorted Pins ───
   const processedPins=useMemo(()=>{
     let fp=pins.filter(p=>{
-      if(filterStatus!=="all"&&p.status!==filterStatus)return false;
+      if(filterStatus==="open"&&p.status!=="open")return false;
+      if(filterStatus==="resolved"&&p.status!=="resolved")return false;
+      if(["high","medium","low"].includes(filterStatus)&&p.priority!==filterStatus)return false;
       if(deviceFilter!=="all"&&p.device!==deviceFilter)return false;
       return true;
     });
@@ -370,7 +373,7 @@ export default function NexxenCommenter() {
 
   // ─── Auth ───
   if(view==="auth")return(
-    <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:t.cardGradient}}><link href={fontLink} rel="stylesheet"/><style>{css}</style>
+    <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}><link href={fontLink} rel="stylesheet"/><style>{css}</style>
     <div style={{width:420,animation:"fadeIn .4s ease"}}>
       <div style={{textAlign:"center",marginBottom:28}}><Logo size={56}/><h1 style={{fontSize:22,fontWeight:800,marginTop:14,marginBottom:4,letterSpacing:"-0.02em"}}>Nexxen Commenter</h1><p style={{color:t.textMuted,fontSize:13}}>Visual feedback and collaboration</p></div>
       <div style={{...S.modalContent,borderRadius:20}}>
@@ -480,19 +483,19 @@ export default function NexxenCommenter() {
                 {processedPins.map(pin=><PinMarker key={pin.id} pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>)}
                 {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}</div>
             :<div style={{border:"2px dashed "+t.border,borderRadius:18,padding:56,textAlign:"center",background:t.bgAlt}}><Icon name="camera" size={36} color={t.textMuted}/><h3 style={{fontSize:16,fontWeight:600,marginTop:14,marginBottom:6}}>No content yet</h3><p style={{color:t.textMuted,fontSize:13,marginBottom:18}}>Upload a screenshot or add a website URL</p>{!clientMode&&<button onClick={()=>fileInputRef.current?.click()} style={S.btn}><Icon name="upload" size={14}/> Upload</button>}</div>}
-            {/* New pin form */}
-            {pendingPinPos&&canAdd&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:t.bgAlt,borderRadius:16,padding:18,border:"1px solid "+t.accent,boxShadow:t.shadowXl,width:400,zIndex:999,animation:"fadeIn .2s ease"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:6}}><Icon name="pin" size={14} color={t.accent}/><span style={{fontSize:13,fontWeight:700,color:t.accent}}>New Feedback</span></div>
-                <div style={{display:"flex",gap:4}}>{PRIORITIES.map(p=><button key={p.id} onClick={()=>setNewPriority(p.id)} style={{...S.pill,background:newPriority===p.id?p.bg:"transparent",color:newPriority===p.id?p.color:t.textMuted,borderColor:newPriority===p.id?p.color:"transparent"}}><Icon name="flag" size={10}/> {p.label}</button>)}</div></div>
-              {clientMode&&<input value={newAuthor} onChange={e=>setNewAuthor(e.target.value)} placeholder="Your name" style={{...S.input,marginBottom:8}}/>}
-              <textarea value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Describe the issue..." rows={3} autoFocus style={{...S.input,resize:"none"}}/>
-              {attachment&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:t.bgMuted,borderRadius:8,marginTop:8,fontSize:12,color:t.textSecondary}}><Icon name="paperclip" size={12}/>{attachment.name}<button onClick={()=>setAttachment(null)} style={{background:"none",border:"none",cursor:"pointer",color:t.textMuted,marginLeft:"auto"}}><Icon name="x" size={12}/></button></div>}
-              <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
-                <button onClick={()=>attachRef.current?.click()} style={{...S.btnGhost,padding:"6px 10px",borderRadius:8}}><Icon name="paperclip" size={13}/></button>
+            {/* New pin form - positioned near the pin */}
+            {pendingPinPos&&canAdd&&<div style={{position:"absolute",left:Math.min(pendingPinPos.x,65)+"%",top:pendingPinPos.y+"%",transform:"translate(20px,-50%)",background:t.bgAlt,borderRadius:16,padding:18,border:"1px solid "+t.accent,boxShadow:t.shadowXl,width:340,zIndex:999,animation:"fadeIn .15s ease"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:22,height:22,borderRadius:"50%",background:t.accent,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="pin" size={11} color="#fff"/></div><span style={{fontSize:13,fontWeight:700}}>Add Comment</span></div>
+                <button onClick={()=>{setPendingPinPos(null);setNewComment("");setAttachment(null);}} style={{background:"none",border:"none",cursor:"pointer",color:t.textMuted}}><Icon name="x" size={14}/></button></div>
+              <div style={{display:"flex",gap:4,marginBottom:10}}>{PRIORITIES.map(p=><button key={p.id} onClick={()=>setNewPriority(p.id)} style={{...S.pill,background:newPriority===p.id?p.bg:"transparent",color:newPriority===p.id?p.color:t.textMuted,borderColor:newPriority===p.id?p.color:"transparent",fontSize:11}}><Icon name="flag" size={9}/> {p.label}</button>)}</div>
+              {clientMode&&<input value={newAuthor} onChange={e=>setNewAuthor(e.target.value)} placeholder="Your name" style={{...S.input,marginBottom:8,padding:"8px 12px"}}/>}
+              <textarea value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Describe the issue..." rows={3} autoFocus style={{...S.input,resize:"none",padding:"8px 12px"}}/>
+              {attachment&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",background:t.bgMuted,borderRadius:8,marginTop:8,fontSize:11,color:t.textSecondary}}><Icon name="paperclip" size={11}/>{attachment.name}<button onClick={()=>setAttachment(null)} style={{background:"none",border:"none",cursor:"pointer",color:t.textMuted,marginLeft:"auto"}}><Icon name="x" size={11}/></button></div>}
+              <div style={{display:"flex",gap:6,marginTop:10,alignItems:"center"}}>
+                <button onClick={()=>attachRef.current?.click()} style={{...S.btnGhost,padding:"5px 8px",borderRadius:8}}><Icon name="paperclip" size={12}/></button>
                 <input ref={attachRef} type="file" onChange={handleAttach} style={{display:"none"}}/>
                 <div style={{flex:1}}/>
-                <button onClick={()=>{setPendingPinPos(null);setNewComment("");setAttachment(null);}} style={{...S.btnGhost,justifyContent:"center",borderRadius:10}}>Cancel</button>
-                <button onClick={submitNewPin} disabled={!newComment.trim()} style={{...S.btn,opacity:newComment.trim()?1:0.4,cursor:newComment.trim()?"pointer":"not-allowed"}}><Icon name="send" size={13}/> Submit</button>
+                <button onClick={submitNewPin} disabled={!newComment.trim()} style={{...S.btn,opacity:newComment.trim()?1:0.4,cursor:newComment.trim()?"pointer":"not-allowed",padding:"7px 16px"}}><Icon name="send" size={12}/> Submit</button>
               </div></div>}
           </div></div>
         {/* Sidebar */}
@@ -509,9 +512,15 @@ export default function NexxenCommenter() {
             <div style={{display:"flex",gap:3,background:t.bgMuted,borderRadius:8,padding:2,marginBottom:8}}>
               {["all","open","resolved"].map(f=><button key={f} onClick={()=>setFilterStatus(f)} style={{flex:1,background:filterStatus===f?t.bgAlt:"transparent",border:"none",color:filterStatus===f?t.text:t.textMuted,borderRadius:6,padding:"4px 0",fontSize:11,cursor:"pointer",fontWeight:600,boxShadow:filterStatus===f?t.shadow:"none",textTransform:"capitalize"}}>{f} ({f==="all"?pins.length:pins.filter(p=>p.status===f).length})</button>)}</div>
             {/* Device filter */}
-            <div style={{display:"flex",gap:4}}>
+            <div style={{display:"flex",gap:4,marginBottom:6}}>
               {[{id:"all",label:"All Devices"},...DEVICES].map(d=>{const isAct=deviceFilter===d.id;return<button key={d.id} onClick={()=>setDeviceFilter(d.id)} style={{...S.pill,background:isAct?t.accentLight:t.bgMuted,color:isAct?t.accent:t.textMuted,borderColor:isAct?t.accentSoft:"transparent",fontSize:10}}>
                 {d.id!=="all"&&<Icon name={d.id==="desktop"?"monitor":d.id==="tablet"?"tablet":"phone"} size={10}/>} {d.label||d.id}</button>;})}
+            </div>
+            {/* Priority filter */}
+            <div style={{display:"flex",gap:4}}>
+              <button onClick={()=>setFilterStatus(filterStatus==="all"?"all":filterStatus)} style={{...S.pill,background:!["high","medium","low"].includes(filterStatus)?t.bgMuted:t.bgMuted,color:!["high","medium","low"].includes(filterStatus)?t.textSecondary:t.textMuted,fontSize:10}} onClick={()=>{if(sortBy!=="priority")setSortBy("priority");else setSortBy("newest");}}>
+                <Icon name="sort" size={10}/> {sortBy==="priority"?"By Priority":"Sort Priority"}</button>
+              {PRIORITIES.map(p=>{const ct=pins.filter(x=>x.priority===p.id).length;return<button key={p.id} onClick={()=>setFilterStatus(filterStatus===p.id?"all":p.id)} style={{...S.pill,background:filterStatus===p.id?p.bg:t.bgMuted,color:filterStatus===p.id?p.color:t.textMuted,borderColor:filterStatus===p.id?p.color:"transparent",fontSize:10}}><Icon name="flag" size={9} color={filterStatus===p.id?p.color:t.textMuted}/> {p.label} ({ct})</button>;})}
             </div>
           </div>
           {/* Pin list */}
@@ -596,12 +605,15 @@ function PinMarker({pin,index,isSelected,t,onClick}){
   const[hover,setHover]=useState(false);
   const cm=pin.comments?.[0];
   const pri=PRIORITIES.find(p=>p.id===pin.priority)||PRIORITIES[1];
-  return<div onClick={e=>{e.stopPropagation();onClick(pin);}} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-100%)",cursor:"pointer",zIndex:isSelected?100:hover?90:10,filter:isSelected?"drop-shadow(0 0 8px "+c+")":"none",transition:"filter .15s"}}>
-    <svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill={c} stroke="#fff" strokeWidth="1.5"/><text x="14" y="18" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700" fontFamily="sans-serif">{index+1}</text></svg>
+  return<div onClick={e=>{e.stopPropagation();onClick(pin);}} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",zIndex:isSelected?100:hover?90:10,transition:"transform .15s"}}>
+    {/* Pin circle */}
+    <div style={{width:28,height:28,borderRadius:"50%",background:c,border:"2.5px solid #fff",boxShadow:isSelected?"0 0 0 3px "+c+",0 2px 8px rgba(0,0,0,0.25)":"0 2px 8px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"box-shadow .15s",transform:hover?"scale(1.15)":"scale(1)"}}>
+      <span style={{color:"#fff",fontSize:11,fontWeight:700,lineHeight:1}}>{index+1}</span>
+    </div>
     {/* Priority dot */}
-    <div style={{position:"absolute",top:-2,right:-4,width:10,height:10,borderRadius:"50%",background:pri.color,border:"2px solid #fff"}}/>
+    <div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:pri.color,border:"2px solid #fff"}}/>
     {/* Hover tooltip */}
-    {hover&&!isSelected&&cm&&<div style={{position:"absolute",left:"50%",bottom:"100%",transform:"translateX(-50%)",marginBottom:6,background:t.bgAlt,borderRadius:10,padding:10,border:"1px solid "+t.border,boxShadow:t.shadowLg,width:230,pointerEvents:"none"}}>
+    {hover&&!isSelected&&cm&&<div style={{position:"absolute",left:"50%",bottom:"100%",transform:"translateX(-50%)",marginBottom:8,background:t.bgAlt,borderRadius:12,padding:10,border:"1px solid "+t.border,boxShadow:t.shadowLg,width:230,pointerEvents:"none"}}>
       {pin.screenshot&&<img src={pin.screenshot} style={{width:"100%",borderRadius:6,marginBottom:6,display:"block",border:"1px solid "+t.border}} alt=""/>}
       <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}><PriBadge pri={pin.priority}/><DevBadge dev={pin.device}/></div>
       <div style={{fontSize:11,fontWeight:700,color:t.accent,marginBottom:2}}>{cm.author}</div>
@@ -609,7 +621,10 @@ function PinMarker({pin,index,isSelected,t,onClick}){
     </div>}
   </div>;
 }
-function PendingMarker({pos,t}){return<div style={{position:"absolute",left:pos.x+"%",top:pos.y+"%",transform:"translate(-50%,-100%)",zIndex:200,animation:"pulse 1s ease infinite"}}><svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill={t.accent} opacity="0.7" stroke="#fff" strokeWidth="1.5"/><text x="14" y="18" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">?</text></svg></div>;}
+function PendingMarker({pos,t}){return<div style={{position:"absolute",left:pos.x+"%",top:pos.y+"%",transform:"translate(-50%,-50%)",zIndex:200,animation:"pulse 1s ease infinite",pointerEvents:"none"}}>
+<div style={{width:32,height:32,borderRadius:"50%",background:t.accent,border:"3px solid #fff",boxShadow:"0 0 0 2px "+t.accent+",0 4px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</div></div>;}
 function ReplyBox({pinId,onReply,user,clientMode,t,S}){
   const[text,setText]=useState("");const[author,setAuthor]=useState("");const[att,setAtt]=useState(null);const ref=useRef(null);
   const submit=()=>{if(!text.trim())return;onReply(pinId,text.trim(),clientMode?(author.trim()||"Guest"):(user?.name||"Anonymous"),att);setText("");setAtt(null);};
