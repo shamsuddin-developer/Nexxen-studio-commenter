@@ -146,89 +146,138 @@ const Icon = ({name,size=16,color="currentColor"}) => {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{d[name]}</svg>;
 };
 
-// ─── Screenshot: capture the visible canvas area and draw a numbered pin marker ───
-async function captureCanvasScreenshot(canvasEl, pinXpct, pinYpct, pinNum) {
+// ─── Screenshot helpers ───
+// For URL projects: fetch the page HTML, render it onto a canvas via an offscreen iframe,
+// then draw only the new pin marker. Since cross-origin iframes block canvas access,
+// we use a hidden same-origin blob URL approach: load the URL in a new window briefly
+// and use the Page Visibility / Print API — but that requires user gesture.
+// Best practical approach without a backend: use the iframe src URL with a
+// free screenshot proxy (screenshotmachine / microlink). We fall back to a
+// clean SVG-based location card if the proxy is unavailable.
+async function captureUrlScreenshot(url, pinXpct, pinYpct, pinNum, containerW, containerH) {
   try {
-    const canvas = await html2canvas(canvasEl, {
-      useCORS: true,
-      allowTaint: true,
-      scale: 1,
-      logging: false,
-      backgroundColor: "#ffffff",
+    // Try microlink free tier (no key needed for basic use)
+    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+    const res = await fetch(apiUrl);
+    if (!res.ok) throw new Error("microlink failed");
+    const json = await res.json();
+    const imgUrl = json?.data?.screenshot?.url;
+    if (!imgUrl) throw new Error("no screenshot url");
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const mx = (pinXpct / 100) * c.width;
+        const my = (pinYpct / 100) * c.height;
+        drawPinMarker(ctx, mx, my, pinNum);
+        resolve(c.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = () => resolve(buildLocationCard(url, pinXpct, pinYpct, pinNum));
+      img.src = imgUrl;
     });
-    const ctx = canvas.getContext("2d");
-    const mx = (pinXpct / 100) * canvas.width;
-    const my = (pinYpct / 100) * canvas.height;
-    // Spotlight ring
-    ctx.save();
-    ctx.strokeStyle = "rgba(139,92,246,0.6)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(mx, my, 22, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-    // Pin circle
-    ctx.fillStyle = "#8B5CF6";
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(mx, my, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Number label
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 13px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(pinNum), mx, my);
-    return canvas.toDataURL("image/jpeg", 0.75);
-  } catch (e) {
-    console.error("Screenshot capture failed:", e);
-    return null;
+  } catch {
+    return buildLocationCard(url, pinXpct, pinYpct, pinNum);
   }
 }
 
-// ─── Screenshot for image projects: crop around pin and draw marker ───
-function captureImageRegion(src, px, py, pinNum, cb) {
-  try {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      try {
-        const c = document.createElement("canvas");
-        const x = c.getContext("2d");
-        c.width = 400; c.height = 240;
-        const sx = Math.max(0, Math.min((px / 100) * img.width - 200, img.width - 400));
-        const sy = Math.max(0, Math.min((py / 100) * img.height - 120, img.height - 240));
-        x.drawImage(img, sx, sy, 400, 240, 0, 0, 400, 240);
-        const mx = (px / 100) * img.width - sx;
-        const my = (py / 100) * img.height - sy;
-        // Spotlight ring
-        x.strokeStyle = "rgba(139,92,246,0.6)";
-        x.lineWidth = 3;
-        x.beginPath();
-        x.arc(mx, my, 22, 0, Math.PI * 2);
-        x.stroke();
-        // Pin circle
-        x.fillStyle = "#8B5CF6";
-        x.strokeStyle = "#fff";
-        x.lineWidth = 2.5;
-        x.beginPath();
-        x.arc(mx, my, 14, 0, Math.PI * 2);
-        x.fill();
-        x.stroke();
-        // Number
-        x.fillStyle = "#fff";
-        x.font = "bold 13px sans-serif";
-        x.textAlign = "center";
-        x.textBaseline = "middle";
-        x.fillText(String(pinNum), mx, my);
-        cb(c.toDataURL("image/jpeg", 0.75));
-      } catch (e) { console.error("Image region capture error:", e); cb(null); }
-    };
-    img.onerror = () => cb(null);
-    img.src = src;
-  } catch (e) { console.error("Image load error:", e); cb(null); }
+// Fallback: draw a clean location card showing the URL and pin position
+function buildLocationCard(url, px, py, pinNum) {
+  const c = document.createElement("canvas");
+  c.width = 480; c.height = 200;
+  const ctx = c.getContext("2d");
+  // Background
+  ctx.fillStyle = "#1E1B2E";
+  ctx.roundRect ? ctx.roundRect(0, 0, 480, 200, 12) : ctx.rect(0, 0, 480, 200);
+  ctx.fill();
+  // Grid lines
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 480; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 200); ctx.stroke(); }
+  for (let i = 0; i < 200; i += 40) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(480, i); ctx.stroke(); }
+  // Crosshair at pin position
+  const mx = (px / 100) * 480;
+  const my = (py / 100) * 200;
+  ctx.strokeStyle = "rgba(139,92,246,0.3)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, 200); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(480, my); ctx.stroke();
+  ctx.setLineDash([]);
+  // URL label
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  ctx.font = "12px monospace";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  const shortUrl = url.replace(/^https?:\/\//, "").substring(0, 48);
+  ctx.fillText(shortUrl, 16, 16);
+  // Position label
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`${Math.round(px)}%, ${Math.round(py)}%`, 16, 36);
+  // Draw pin marker
+  drawPinMarker(ctx, mx, my, pinNum);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+function drawPinMarker(ctx, mx, my, pinNum) {
+  // Spotlight ring
+  ctx.strokeStyle = "rgba(139,92,246,0.5)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(mx, my, 24, 0, Math.PI * 2);
+  ctx.stroke();
+  // Pin circle
+  ctx.fillStyle = "#8B5CF6";
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(mx, my, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Number
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(pinNum), mx, my);
+}
+
+// ─── Screenshot for image projects: crop a region around the pin and draw only the new marker ───
+function captureImageRegion(src, px, py, pinNum) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      // No crossOrigin needed for data: URLs
+      img.onload = () => {
+        try {
+          const c = document.createElement("canvas");
+          const ctx = c.getContext("2d");
+          // Crop a 480x280 window centred on the click point
+          const cropW = 480, cropH = 280;
+          const pinPxX = (px / 100) * img.width;
+          const pinPxY = (py / 100) * img.height;
+          const sx = Math.max(0, Math.min(pinPxX - cropW / 2, img.width - cropW));
+          const sy = Math.max(0, Math.min(pinPxY - cropH / 2, img.height - cropH));
+          const actualW = Math.min(cropW, img.width);
+          const actualH = Math.min(cropH, img.height);
+          c.width = actualW; c.height = actualH;
+          // Draw ONLY the image — no existing pin DOM elements
+          ctx.drawImage(img, sx, sy, actualW, actualH, 0, 0, actualW, actualH);
+          // Draw only the new pin marker
+          const mx = pinPxX - sx;
+          const my = pinPxY - sy;
+          drawPinMarker(ctx, mx, my, pinNum);
+          resolve(c.toDataURL("image/jpeg", 0.82));
+        } catch (e) { console.error("Image region error:", e); resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
+    } catch (e) { console.error("Image load error:", e); resolve(null); }
+  });
 }
 
 // ─── Main Application ───
@@ -346,13 +395,14 @@ export default function NexxenCommenter() {
     if(attachment){aName=attachment.name;aData=attachment.data;aType=attachment.type;}
     await DB.addComment(pin.id,author,newComment.trim(),aName,aData,aType);
 
-    // FIX 2: Capture a real screenshot of the visible canvas area
+    // Screenshot: for image projects crop from raw image data (no DOM capture, no existing pins);
+    // for URL projects use microlink screenshot API with fallback location card.
     const num=pins.length+1;
     let shotData=null;
     if(proj.type==="image"&&proj.image_data){
-      shotData=await new Promise(resolve=>captureImageRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num,resolve));
-    } else if(canvasContentRef.current){
-      shotData=await captureCanvasScreenshot(canvasContentRef.current,pendingPinPos.x,pendingPinPos.y,num);
+      shotData=await captureImageRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num);
+    } else if(proj.url){
+      shotData=await captureUrlScreenshot(proj.url,pendingPinPos.x,pendingPinPos.y,num);
     }
     if(shotData){DB.updatePinScreenshot(pin.id,shotData);}
 
@@ -524,12 +574,15 @@ export default function NexxenCommenter() {
         <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center",padding:20,background:t.canvasBg,cursor:isPlacingPin?"crosshair":"default"}}>
           <div style={{width:device.width,maxWidth:"100%",position:"relative",transition:"width .3s ease"}}>
 
-            {/* FIX 1: URL project — pins overlay is absolutely positioned over the iframe,
-                both sharing the same parent with position:relative and explicit height.
-                Pins use percentage coords relative to this container, not the viewport. */}
+            {/* URL project:
+                - iframe fills the container and can scroll freely
+                - pin overlay is position:absolute over the iframe, same size
+                - pins use % coords relative to the CONTAINER (viewport window), not iframe scroll content
+                - this means pins stay fixed at the visual position where the user clicked,
+                  regardless of iframe scroll — which is the correct UX for a review tool
+            */}
             {projType==="url"&&projUrl?
               <div
-                ref={canvasContentRef}
                 style={{position:"relative",width:"100%",height:"calc(100vh - 94px)",borderRadius:12,border:"1px solid "+t.border,background:"#fff",overflow:"hidden"}}
               >
                 <iframe
@@ -539,35 +592,34 @@ export default function NexxenCommenter() {
                   onLoad={()=>setIframeLoaded(true)}
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 />
-                {/* Click-capture + pin overlay — same size as iframe, pins stay fixed */}
+                {/* Single unified overlay: handles clicks AND renders pins. z-index above iframe. */}
                 <div
                   onClick={handleCanvasClick}
-                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:isPlacingPin?"auto":"none",borderRadius:12,zIndex:10}}
-                >
+                  style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:isPlacingPin?"auto":"none",borderRadius:12,zIndex:20}}
+                />
+                {/* Pin markers — always on top, pointer-events auto so they're clickable */}
+                <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:30}}>
                   {processedPins.map(pin=>(
-                    <PinMarker key={pin.id} pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
-                  ))}
-                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
-                </div>
-                {/* Always-visible pin markers (non-placing mode) */}
-                {!isPlacingPin&&<div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:9}}>
-                  {processedPins.map(pin=>(
-                    <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto",zIndex:selectedPin===pin.id?100:10}}>
+                    <div
+                      key={pin.id}
+                      onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}}
+                      style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}
+                    >
                       <PinMarker pin={pin} index={pins.indexOf(pin)} isSelected={selectedPin===pin.id} t={t} onClick={p=>setSelectedPin(selectedPin===p.id?null:p.id)}/>
                     </div>
                   ))}
-                </div>}
-                {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12,zIndex:20}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
+                  {pendingPinPos&&<PendingMarker pos={pendingPinPos} t={t}/>}
+                </div>
+                {!iframeLoaded&&<div style={{position:"absolute",inset:0,background:t.bgAlt,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:12,zIndex:40}}><div style={{width:28,height:28,border:"2px solid "+t.border,borderTopColor:t.accent,borderRadius:"50%",animation:"spin .8s linear infinite"}}/><p style={{color:t.textMuted,fontSize:12,marginTop:10}}>Loading...</p></div>}
               </div>
 
             :projImage?
               <div
-                ref={canvasContentRef}
                 style={{position:"relative",borderRadius:12,border:"1px solid "+t.border,display:"inline-block",width:"100%"}}
                 onClick={handleCanvasClick}
               >
-                <img src={projImage} style={{width:"100%",display:"block",borderRadius:12}} alt="Project"/>
-                {/* FIX 1: pins overlay sits on top of the image, same dimensions */}
+                <img src={projImage} style={{width:"100%",display:"block",borderRadius:12,userSelect:"none",pointerEvents:"none"}} alt="Project" draggable={false}/>
+                {/* Pin overlay — same bounding box as image */}
                 <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}>
                   {processedPins.map(pin=>(
                     <div key={pin.id} onClick={e=>{e.stopPropagation();setSelectedPin(selectedPin===pin.id?null:pin.id);}} style={{position:"absolute",left:pin.x+"%",top:pin.y+"%",transform:"translate(-50%,-50%)",cursor:"pointer",pointerEvents:"auto"}}>
