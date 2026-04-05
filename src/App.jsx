@@ -146,48 +146,44 @@ const Icon = ({name,size=16,color="currentColor"}) => {
 
 // ─── Screenshot with pin marker ───
 function captureRegion(src,px,py,pinNum,cb){
+  try{
   const img=new Image();img.crossOrigin="anonymous";
-  img.onload=()=>{const c=document.createElement("canvas"),x=c.getContext("2d");c.width=360;c.height=220;
+  img.onload=()=>{try{const c=document.createElement("canvas"),x=c.getContext("2d");c.width=360;c.height=220;
     const sx=Math.max(0,Math.min((px/100)*img.width-180,img.width-360));
     const sy=Math.max(0,Math.min((py/100)*img.height-110,img.height-220));
     x.drawImage(img,sx,sy,360,220,0,0,360,220);
-    // Darkened overlay around pin
     x.fillStyle="rgba(0,0,0,0.15)";x.fillRect(0,0,360,220);
-    // Spotlight circle around pin
     const mx=(px/100)*img.width-sx,my=(py/100)*img.height-sy;
     x.save();x.globalCompositeOperation="destination-out";x.beginPath();x.arc(mx,my,40,0,Math.PI*2);x.fill();x.restore();
-    // Pin marker
     x.fillStyle="#8B5CF6";x.strokeStyle="#fff";x.lineWidth=2;x.beginPath();x.arc(mx,my,12,0,Math.PI*2);x.fill();x.stroke();
     x.fillStyle="#fff";x.font="bold 11px sans-serif";x.textAlign="center";x.textBaseline="middle";x.fillText(String(pinNum),mx,my);
-    // Border
     x.strokeStyle="rgba(139,92,246,0.5)";x.lineWidth=2;x.strokeRect(1,1,358,218);
-    cb(c.toDataURL("image/jpeg",0.5));};
+    cb(c.toDataURL("image/jpeg",0.5));}catch(e){console.error("Capture error:",e);cb(null);}};
   img.onerror=()=>cb(null);img.src=src;
+  }catch(e){console.error("Image load error:",e);cb(null);}
 }
 function genIframeShot(url,px,py,pinNum,cb){
+  try{
   const c=document.createElement("canvas"),x=c.getContext("2d");c.width=360;c.height=220;
-  // Browser mockup
+  const rr=(ctx,rx,ry,rw,rh,r)=>{ctx.beginPath();ctx.moveTo(rx+r,ry);ctx.lineTo(rx+rw-r,ry);ctx.quadraticCurveTo(rx+rw,ry,rx+rw,ry+r);ctx.lineTo(rx+rw,ry+rh-r);ctx.quadraticCurveTo(rx+rw,ry+rh,rx+rw-r,ry+rh);ctx.lineTo(rx+r,ry+rh);ctx.quadraticCurveTo(rx,ry+rh,rx,ry+rh-r);ctx.lineTo(rx,ry+r);ctx.quadraticCurveTo(rx,ry,rx+r,ry);ctx.closePath();};
   x.fillStyle="#F6F4FB";x.fillRect(0,0,360,220);
   x.fillStyle="#fff";x.fillRect(0,0,360,32);
   x.strokeStyle="#E4E0EF";x.lineWidth=1;x.beginPath();x.moveTo(0,32);x.lineTo(360,32);x.stroke();
   [["#FF5F57",14],["#FFBD2E",28],["#28CA42",42]].forEach(([cl,cx])=>{x.fillStyle=cl;x.beginPath();x.arc(cx,16,4,0,Math.PI*2);x.fill();});
-  x.fillStyle="#EFECF7";x.beginPath();x.roundRect(54,7,250,18,4);x.fill();
+  x.fillStyle="#EFECF7";rr(x,54,7,250,18,4);x.fill();
   x.fillStyle="#9E97B3";x.font="10px sans-serif";x.textAlign="left";
   x.fillText(url.length>38?url.substring(0,38)+"...":url,62,20);
-  // Content lines
-  x.fillStyle="#E4E0EF";for(let i=0;i<7;i++){x.beginPath();x.roundRect(18,44+i*22,100+Math.random()*180,8,3);x.fill();}
-  // Pin marker
+  x.fillStyle="#E4E0EF";for(let i=0;i<7;i++){rr(x,18,44+i*22,100+Math.random()*180,8,3);x.fill();}
   const mx=(px/100)*360,my=32+(py/100)*188;
   x.fillStyle="#8B5CF6";x.strokeStyle="#fff";x.lineWidth=2;x.beginPath();x.arc(mx,my,14,0,Math.PI*2);x.fill();x.stroke();
   x.fillStyle="#fff";x.font="bold 12px sans-serif";x.textAlign="center";x.textBaseline="middle";x.fillText(String(pinNum),mx,my);
-  // Crosshair lines
   x.strokeStyle="rgba(139,92,246,0.3)";x.lineWidth=1;x.setLineDash([4,4]);
   x.beginPath();x.moveTo(mx,32);x.lineTo(mx,220);x.stroke();
   x.beginPath();x.moveTo(0,my);x.lineTo(360,my);x.stroke();
-  // Label
-  x.setLineDash([]);x.fillStyle="rgba(139,92,246,0.85)";x.beginPath();x.roundRect(mx-50,my+20,100,20,4);x.fill();
+  x.setLineDash([]);x.fillStyle="rgba(139,92,246,0.85)";rr(x,mx-50,my+20,100,20,4);x.fill();
   x.fillStyle="#fff";x.font="10px sans-serif";x.fillText(Math.round(px)+"%, "+Math.round(py)+"%",mx,my+30);
   cb(c.toDataURL("image/jpeg",0.5));
+  }catch(e){console.error("Screenshot error:",e);cb(null);}
 }
 
 // ─── Main Application ───
@@ -297,13 +293,17 @@ export default function NexxenCommenter() {
     let aName=null,aData=null,aType=null;
     if(attachment){aName=attachment.name;aData=attachment.data;aType=attachment.type;}
     await DB.addComment(pin.id,author,newComment.trim(),aName,aData,aType);
-    // Screenshot
+    // Generate screenshot first, then add pin to state
     const num=pins.length+1;
-    const saveShot=d=>{if(d){DB.updatePinScreenshot(pin.id,d);setPins(prev=>prev.map(p=>p.id===pin.id?{...p,screenshot:d}:p));}};
-    if(proj.type==="image"&&proj.image_data)captureRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num,saveShot);
-    else if(proj.type==="url"&&proj.url)genIframeShot(proj.url,pendingPinPos.x,pendingPinPos.y,num,saveShot);
+    const generateShot=()=>new Promise(resolve=>{
+      if(proj.type==="image"&&proj.image_data)captureRegion(proj.image_data,pendingPinPos.x,pendingPinPos.y,num,d=>resolve(d));
+      else if(proj.type==="url"&&proj.url)genIframeShot(proj.url,pendingPinPos.x,pendingPinPos.y,num,d=>resolve(d));
+      else resolve(null);
+    });
+    const shotData=await generateShot();
+    if(shotData){DB.updatePinScreenshot(pin.id,shotData);}
     const cmt={author,text:newComment.trim(),timestamp:new Date().toISOString(),attachmentName:aName,attachmentData:aData,attachmentType:aType};
-    setPins(prev=>[...prev,{...pin,comments:[cmt]}]);
+    setPins(prev=>[...prev,{...pin,screenshot:shotData,comments:[cmt]}]);
     setPendingPinPos(null);setNewComment("");setNewPriority("medium");setAttachment(null);setSelectedPin(pin.id);
     if(currentProject){const nc=(currentProject.feedback_count||0)+1;await DB.updateProject(currentProject.id,{feedback_count:nc});
       const up={...currentProject,feedback_count:nc};setCurrentProject(up);setProjects(prev=>prev.map(p=>p.id===up.id?up:p));}
@@ -375,7 +375,7 @@ export default function NexxenCommenter() {
   if(view==="auth")return(
     <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}><link href={fontLink} rel="stylesheet"/><style>{css}</style>
     <div style={{width:420,animation:"fadeIn .4s ease"}}>
-      <div style={{textAlign:"center",marginBottom:28}}><Logo size={56}/><h1 style={{fontSize:22,fontWeight:800,marginTop:14,marginBottom:4,letterSpacing:"-0.02em"}}>Nexxen Commenter</h1><p style={{color:t.textMuted,fontSize:13}}>Visual feedback and collaboration</p></div>
+      <div style={{textAlign:"center",marginBottom:28,display:"flex",flexDirection:"column",alignItems:"center"}}><Logo size={56}/><h1 style={{fontSize:22,fontWeight:800,marginTop:14,marginBottom:4,letterSpacing:"-0.02em"}}>Nexxen Commenter</h1><p style={{color:t.textMuted,fontSize:13}}>Visual feedback and collaboration</p></div>
       <div style={{...S.modalContent,borderRadius:20}}>
         <div style={{display:"flex",marginBottom:20,background:t.bgMuted,borderRadius:10,padding:3}}>{["login","register"].map(m=><button key={m} onClick={()=>setAuthMode(m)} style={{flex:1,padding:"9px 0",borderRadius:8,border:"none",cursor:"pointer",background:authMode===m?t.bgAlt:"transparent",color:authMode===m?t.text:t.textMuted,fontWeight:600,fontSize:13,boxShadow:authMode===m?t.shadow:"none"}}>{m==="login"?"Sign In":"Create Account"}</button>)}</div>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -385,7 +385,7 @@ export default function NexxenCommenter() {
           <button onClick={handleAuth} style={{...S.btn,justifyContent:"center",padding:"11px 0",width:"100%",borderRadius:12,fontSize:14}}>
             {authMode==="login"?"Sign In":"Create Account"}</button>
         </div></div>
-      <div style={{textAlign:"center",marginTop:14}}><button onClick={toggleTheme} style={{...S.btnGhost,margin:"0 auto",padding:"6px 14px",borderRadius:20,fontSize:12}}><Icon name={theme==="light"?"moon":"sun"} size={13}/> {theme==="light"?"Dark":"Light"}</button></div>
+      <div style={{display:"flex",justifyContent:"center",marginTop:14}}><button onClick={toggleTheme} style={{...S.btnGhost,padding:"6px 14px",borderRadius:20,fontSize:12}}><Icon name={theme==="light"?"moon":"sun"} size={13}/> {theme==="light"?"Dark":"Light"}</button></div>
     </div>
     {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:t.danger,color:"#fff",padding:"10px 20px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999}}>{toast}</div>}
     </div>);
